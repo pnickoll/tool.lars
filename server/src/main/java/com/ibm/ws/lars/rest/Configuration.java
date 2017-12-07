@@ -18,10 +18,14 @@ package com.ibm.ws.lars.rest;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.enterprise.context.ApplicationScoped;
+import javax.inject.Inject;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.UriInfo;
 
@@ -35,8 +39,12 @@ public class Configuration {
     private final static int HTTP_PORT = 80;
     private final static String HTTPS_SCHEME = "https";
     private final static int HTTPS_PORT = 443;
+    private final static Logger logger = Logger.getLogger(Configuration.class.getName());
 
     private final String urlBase;
+
+    @Inject
+    private HttpServletRequest servletRequest;
 
     public Configuration() {
         String urlBase = null;
@@ -62,10 +70,25 @@ public class Configuration {
      * @return the base URL of the REST application
      */
     public String getRestBaseUri(UriInfo uriInfo) {
+        if (logger.isLoggable(Level.FINE)) {
+            logger.log(Level.FINE, "Getting base URL, request: {0}, base: {1}, servletRequest: {2}", new Object[] { uriInfo.getRequestUri(),
+                                                                                                                   uriInfo.getBaseUri(),
+                                                                                                                   servletRequest.getRequestURL().toString() });
+        }
         if (urlBase != null) {
             return urlBase;
         } else {
-            return stripDefaultPort(uriInfo.getBaseUri()).toString();
+            try {
+                // Workaround incorrect value from uriInfo.getBaseUri()
+                URI requestUri = new URI(servletRequest.getRequestURL().toString());
+                URI baseUri = uriInfo.getBaseUriBuilder().host(requestUri.getHost()).scheme(requestUri.getScheme()).port(requestUri.getPort()).build();
+                if (logger.isLoggable(Level.FINE)) {
+                    logger.log(Level.FINE, "Base url computation: requestUri: {0}, computedBase: {1}", new Object[] { requestUri, baseUri });
+                }
+                return baseUri.toString();
+            } catch (URISyntaxException e) {
+                throw new WebApplicationException(e);
+            }
         }
     }
 

@@ -15,11 +15,13 @@
  *******************************************************************************/
 package com.ibm.ws.lars.rest;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.UriInfo;
 
@@ -27,11 +29,11 @@ import mockit.Deencapsulation;
 import mockit.Expectations;
 import mockit.Mocked;
 
-import org.apache.wink.common.model.multipart.BufferedInMultiPart;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.ibm.websphere.jaxrs20.multipart.IMultipartBody;
 import com.ibm.ws.lars.rest.exceptions.AssetPersistenceException;
 import com.ibm.ws.lars.rest.exceptions.InvalidIdException;
 import com.ibm.ws.lars.rest.exceptions.InvalidJsonAssetException;
@@ -53,6 +55,9 @@ public class RepositoryRESTResourceLoggingTest {
 
     @Mocked
     AssetServiceLayer assetService;
+
+    @Mocked
+    Response response;
 
     /** ID for an asset which should never exist */
     public static final String NON_EXISTENT_ID = "ffffffffffffffffffffffff";
@@ -151,7 +156,7 @@ public class RepositoryRESTResourceLoggingTest {
     }
 
     @Test
-    public void testCreateAttachmentWithContent(@Mocked final Logger logger, @Mocked final BufferedInMultiPart inMultiPart) throws InvalidJsonAssetException, InvalidIdException, AssetPersistenceException, NonExistentArtefactException {
+    public void testCreateAttachmentWithContent(@Mocked final Logger logger, @Mocked final IMultipartBody inMultiPart) throws InvalidJsonAssetException, InvalidIdException, AssetPersistenceException, NonExistentArtefactException, IOException {
 
         new Expectations() {
             {

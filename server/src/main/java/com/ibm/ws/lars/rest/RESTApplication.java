@@ -16,15 +16,26 @@
 
 package com.ibm.ws.lars.rest;
 
+import java.util.logging.Logger;
+
+import javax.annotation.PostConstruct;
+import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.ws.rs.ApplicationPath;
 import javax.ws.rs.core.Application;
 
 @ApplicationPath("/ma/v1")
+@ApplicationScoped
 public class RESTApplication extends Application {
 
+    private static final Logger logger = Logger.getLogger(RESTApplication.class.getName());
+
     @Inject
-    RESTApplication(Persistor persistor) {
+    private Persistor persistor;
+
+    @PostConstruct
+    public void postContstruct() {
+        logger.fine("Intializing persistor");
         persistor.initialize();
     }
 

@@ -18,6 +18,8 @@ package com.ibm.ws.lars.rest;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.ws.rs.core.Response;
+
 import mockit.Expectations;
 import mockit.Mocked;
 
@@ -26,6 +28,9 @@ import org.junit.Test;
 import com.ibm.ws.lars.rest.exceptions.RepositoryException;
 
 public class RepositoryExceptionMapperLoggingTest {
+
+    @Mocked
+    private Response response;
 
     @Test
     public void testLogging(@Mocked final Logger logger) {

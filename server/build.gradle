@@ -45,10 +45,10 @@ if (!hasProperty("mongodExecutable")) {
 }
 
 def requiredSpecJars = [
-    'com.ibm.*.javaee.jaxrs.1.1_*.jar',
-    'com.ibm.*.javaee.servlet.3.0_*.jar',
-    'com.ibm.*.javaee.cdi.1.0_*.jar',
-    'com.ibm.*.javaee.annotation.1.1_*.jar']
+    'com.ibm.*.javaee.jaxrs.2.0_*.jar',
+    'com.ibm.*.javaee.servlet.3.1_*.jar',
+    'com.ibm.*.javaee.cdi.1.2_*.jar',
+    'com.ibm.*.javaee.annotation.1.2_*.jar']
 
 ext {
     serverName = archivesBaseName
@@ -78,7 +78,7 @@ dependencies {
     
     sharedLibs group:'org.mongodb', name:'mongo-java-driver', version:mongodb_java_version
     providedCompile fileTree(dir: "${libertyRoot}/dev/api/spec", include: requiredSpecJars)
-    providedCompile fileTree(dir: "${libertyRoot}/dev/api/third-party", include: 'com.ibm.websphere.appserver.thirdparty.jaxrs_*.jar')
+    providedCompile fileTree(dir: "${libertyRoot}/dev/api/ibm", include: 'com.ibm.websphere.appserver.api.jaxrs20_*.jar')
     providedCompile group:'com.google.code.findbugs', name:'annotations', version: '3.0.+'
 
     testCompile group:'junit', name:'junit', version:junit_version
@@ -91,6 +91,7 @@ dependencies {
     // The unit tests need some Liberty classes at runtime, but they should
     // not be compiling against these.
     testRuntime fileTree(dir: "${libertyRoot}/lib", include: '*slf4*.jar')
+    testRuntime group:'org.apache.cxf', name:'cxf-rt-frontend-jaxrs', version:'3.1.+'
     
     antTasks group:'net.wasdev.wlp.ant', name:'wlp-anttasks', version:wlp_ant_tasks_version
 }
@@ -192,7 +193,7 @@ task createTestUsrDir (type: Copy) {
     rename 'server\\.xml', 'mainServer.xml'
     
     def traceSpec=""
-    if (hasProperty("libertyTraceSpec")) {
+    if (project.hasProperty("libertyTraceSpec")) {
         traceSpec = libertyTraceSpec
     }
     

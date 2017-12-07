@@ -16,6 +16,7 @@
 package com.ibm.ws.lars.rest;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
@@ -23,6 +24,12 @@ import javax.ws.rs.core.MultivaluedMap;
 
 @SuppressWarnings("serial")
 public class MultivaluedMapImpl<K, V> extends HashMap<K, List<V>> implements MultivaluedMap<K, V> {
+
+    @Override
+    public boolean equalsIgnoreValueOrder(MultivaluedMap<K, V> arg0) {
+        // TODO Auto-generated method stub
+        return false;
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -33,6 +40,36 @@ public class MultivaluedMapImpl<K, V> extends HashMap<K, List<V>> implements Mul
             put(key, values);
         }
         values.add(value);
+    }
+
+    @Override
+    public void addAll(K key, List<V> value) {
+        List<V> values = get(key);
+        if (values == null) {
+            values = new ArrayList<V>();
+            put(key, values);
+        }
+        values.addAll(value);
+    }
+
+    @Override
+    public void addAll(K key, @SuppressWarnings("unchecked") V... value) {
+        List<V> values = get(key);
+        if (values == null) {
+            values = new ArrayList<V>();
+            put(key, values);
+        }
+        values.addAll(Arrays.asList(value));
+    }
+
+    @Override
+    public void addFirst(K key, V value) {
+        List<V> values = get(key);
+        if (values == null) {
+            values = new ArrayList<V>();
+            put(key, values);
+        }
+        values.add(0, value);
     }
 
     /** {@inheritDoc} */

@@ -39,6 +39,7 @@ import com.ibm.ws.lars.rest.exceptions.InvalidIdException;
 import com.ibm.ws.lars.rest.exceptions.InvalidJsonAssetException;
 import com.ibm.ws.lars.rest.exceptions.NonExistentArtefactException;
 import com.ibm.ws.lars.rest.injection.AssetServiceLayerInjection;
+import com.ibm.ws.lars.rest.injection.ConfigurationInjection;
 import com.ibm.ws.lars.rest.model.Asset;
 import com.ibm.ws.lars.rest.model.AssetCursor;
 import com.ibm.ws.lars.rest.model.Attachment;
@@ -76,7 +77,10 @@ public class AssetServiceLayerTest {
 
         service = new AssetServiceLayer();
 
-        AssetServiceLayerInjection.setConfiguration(service, new Configuration());
+        Configuration configuration = new Configuration();
+        ConfigurationInjection.setServletRequest(configuration, new DummyServletRequest("http://localhost:9080/ma/v1/foo/bar"));
+
+        AssetServiceLayerInjection.setConfiguration(service, configuration);
         AssetServiceLayerInjection.setPersistenceBean(service, memoryPersistor);
 
         dummyUriInfo = new DummyUriInfo(new URI("http://localhost:9080/ma/v1/"));

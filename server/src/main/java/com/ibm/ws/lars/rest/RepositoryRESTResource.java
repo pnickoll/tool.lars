@@ -51,14 +51,13 @@ import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.StreamingOutput;
 import javax.ws.rs.core.UriInfo;
 
-import org.apache.wink.common.model.multipart.BufferedInMultiPart;
-import org.apache.wink.common.model.multipart.InPart;
-
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ibm.websphere.jaxrs20.multipart.IAttachment;
+import com.ibm.websphere.jaxrs20.multipart.IMultipartBody;
 import com.ibm.ws.lars.rest.Condition.Operation;
 import com.ibm.ws.lars.rest.exceptions.AssetPersistenceException;
 import com.ibm.ws.lars.rest.exceptions.InvalidIdException;
@@ -263,8 +262,8 @@ public class RepositoryRESTResource {
     public Response createAttachmentWithContent(@QueryParam("name") String name,
                                                 @PathParam("assetId") String assetId,
                                                 @Context HttpServletRequest request,
-                                                BufferedInMultiPart inMultiPart,
-                                                @Context UriInfo uriInfo) throws InvalidJsonAssetException, InvalidIdException, AssetPersistenceException, NonExistentArtefactException {
+                                                IMultipartBody inMultiPart,
+                                                @Context UriInfo uriInfo) throws InvalidJsonAssetException, InvalidIdException, AssetPersistenceException, NonExistentArtefactException, IOException {
 
         if (logger.isLoggable(Level.FINE)) {
             logger.fine("createAttachmentWithContent called, name: " + name + " assetId: " + assetId);
@@ -272,21 +271,23 @@ public class RepositoryRESTResource {
 
         sanitiseId(assetId, ArtefactType.ASSET);
 
-        List<InPart> parts = inMultiPart.getParts();
+        List<IAttachment> parts = inMultiPart.getAllAttachments();
 
         Attachment attachmentMetadata = null;
         InputStream contentStream = null;
         String contentType = null;
 
-        for (InPart part : parts) {
-            String partName = part.getPartName();
+        for (IAttachment part : parts) {
+            Map<String, String> contentDisposition = parseContentDisposition(part.getHeader("Content-Disposition"));
+            String partName = contentDisposition.get("name");
+            if (logger.isLoggable(Level.FINE)) {
+                logger.log(Level.FINE, "Checking part " + partName, new Object[] { part, contentDisposition });
+            }
             if ("attachmentInfo".equals(partName)) {
-
-                attachmentMetadata = Attachment.jsonToAttachment(part.getInputStream());
+                attachmentMetadata = Attachment.jsonToAttachment(part.getDataHandler().getInputStream());
             } else if (partName != null && partName.equals(name)) {
-                contentType = part.getContentType();
-
-                contentStream = part.getInputStream();
+                contentType = part.getContentType().toString();
+                contentStream = part.getDataHandler().getInputStream();
             }
         }
 
@@ -492,6 +493,32 @@ public class RepositoryRESTResource {
         if (!validId(id)) {
             throw new InvalidIdException(typeOfId.getValue(), id);
         }
+    }
+
+    /**
+     * Parse the Content-Disposition header of a multipart attachment
+     *
+     * @param header the header string
+     * @return a map of parameter names to values
+     */
+    private static Map<String, String> parseContentDisposition(String header) {
+        if (header == null) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, String> result = new HashMap<String, String>();
+
+        for (String parameter : header.split(";")) {
+            String[] parts = parameter.split("=", -1);
+            if (parts.length != 2) {
+                continue;
+            }
+            parts[0] = parts[0].trim().replaceAll("^\"(.*)\"$", "$1");
+            parts[1] = parts[1].trim().replaceAll("^\"(.*)\"$", "$1");
+            result.put(parts[0], parts[1]);
+        }
+
+        return result;
     }
 
     /**

@@ -73,6 +73,12 @@ public class DummyUriInfo implements UriInfo {
 
     /** {@inheritDoc} */
     @Override
+    public UriBuilder getBaseUriBuilder() {
+        return UriBuilder.fromUri(baseUri);
+    }
+
+    /** {@inheritDoc} */
+    @Override
     public URI getAbsolutePath() {
         throw new UnsupportedOperationException();
     }
@@ -80,12 +86,6 @@ public class DummyUriInfo implements UriInfo {
     /** {@inheritDoc} */
     @Override
     public UriBuilder getAbsolutePathBuilder() {
-        throw new UnsupportedOperationException();
-    }
-
-    /** {@inheritDoc} */
-    @Override
-    public UriBuilder getBaseUriBuilder() {
         throw new UnsupportedOperationException();
     }
 
@@ -187,6 +187,19 @@ public class DummyUriInfo implements UriInfo {
     @Override
     public UriBuilder getRequestUriBuilder() {
         throw new UnsupportedOperationException();
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public URI relativize(URI uri) {
+        uri = resolve(uri);
+        return fullUri.relativize(uri);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public URI resolve(URI uri) {
+        return baseUri.resolve(uri);
     }
 
 }
