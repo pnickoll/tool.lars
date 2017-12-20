@@ -16,10 +16,17 @@ package com.ibm.ws.lars.rest;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
@@ -31,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 
 import org.apache.http.HttpEntity;
@@ -112,6 +120,8 @@ public class RepositoryContext extends ExternalResource {
     private HttpClientContext httpClientContext;
     private RequestConfig requestConfig;
 
+    private static SSLContext trustingSslContext;
+
     private final static ObjectMapper jsonReader = new ObjectMapper();
 
     enum Protocol {
@@ -157,15 +167,14 @@ public class RepositoryContext extends ExternalResource {
         b.disableCookieManagement();
 
         // Trust all certificates
-        SSLContext sslContext;
         try {
-            sslContext = new SSLContextBuilder().loadTrustMaterial(null, new TrustStrategy() {
+            trustingSslContext = new SSLContextBuilder().loadTrustMaterial(null, new TrustStrategy() {
                 @Override
                 public boolean isTrusted(X509Certificate[] arg0, String arg1) throws CertificateException {
                     return true;
                 }
             }).build();
-            b.setSslcontext(sslContext);
+            b.setSslcontext(trustingSslContext);
         } catch (KeyManagementException | NoSuchAlgorithmException | KeyStoreException e) {
             throw new RuntimeException(e);
         }
@@ -281,8 +290,57 @@ public class RepositoryContext extends ExternalResource {
 
     public String doGet(String url, int expectedStatusCode)
             throws ClientProtocolException, IOException {
-        HttpGet get = new HttpGet(fullURL + url);
-        return doRequest(get, expectedStatusCode);
+        URL requestUrl = new URL(fullURL + url);
+        HttpURLConnection connection = (HttpURLConnection) requestUrl.openConnection();
+        addAuthentication(connection);
+        trustAllCerts(connection);
+
+        assertStatusCode(expectedStatusCode, connection);
+        try (Reader reader = new InputStreamReader(getStream(connection), StandardCharsets.UTF_8)) {
+            return readFully(reader);
+        }
+    }
+
+    private InputStream getStream(HttpURLConnection connection) throws IOException {
+        InputStream result = null;
+        try {
+            result = connection.getInputStream();
+        } catch (IOException ex) {
+        }
+
+        if (result == null) {
+            result = connection.getErrorStream();
+        }
+
+        if (result == null) {
+            result = new ByteArrayInputStream(new byte[0]);
+        }
+
+        return result;
+    }
+
+    private void addAuthentication(HttpURLConnection connection) {
+        if (user != null && password != null) {
+            String basicAuthUserPass = user + ":" + password;
+            String basicAuth = "Basic " + javax.xml.bind.DatatypeConverter.printBase64Binary(basicAuthUserPass.getBytes(Charset.forName("UTF-8")));
+            connection.setRequestProperty("Authorization", basicAuth);
+        }
+    }
+
+    private void trustAllCerts(HttpURLConnection connection) {
+        if (connection instanceof HttpsURLConnection) {
+            ((HttpsURLConnection) connection).setSSLSocketFactory(trustingSslContext.getSocketFactory());
+        }
+    }
+
+    private String readFully(Reader reader) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        char[] buf = new char[1024];
+        int charsRead;
+        while ((charsRead = reader.read(buf)) > -1) {
+            sb.append(buf, 0, charsRead);
+        }
+        return sb.toString();
     }
 
     public CloseableHttpResponse doRawGet(String url) throws ClientProtocolException, IOException {
@@ -379,6 +437,26 @@ public class RepositoryContext extends ExternalResource {
 
             fail(failMessage);
         }
+    }
+
+    private void assertStatusCode(int expectedStatusCode, HttpURLConnection connection) throws IOException {
+        int actualStatusCode = connection.getResponseCode();
+
+        boolean statusCodeMatches = expectedStatusCode == actualStatusCode
+                                    || (expectedStatusCode == RC_REJECT && (actualStatusCode == 403 || actualStatusCode == 401));
+
+        if (!statusCodeMatches) {
+            String failMessage = "Unexpected status code: " + actualStatusCode + "; expected: " + expectedStatusCode + "\n";
+            failMessage += "Full HTTP response:";
+            try (Reader reader = new InputStreamReader(getStream(connection), StandardCharsets.UTF_8)) {
+                failMessage += readFully(reader);
+            } catch (Exception e) {
+                failMessage += "Unable to get full HTTP response due to " + e;
+            }
+
+            fail(failMessage);
+        }
+
     }
 
     private void cleanRepo() throws InvalidJsonAssetException, IOException {
@@ -482,8 +560,6 @@ public class RepositoryContext extends ExternalResource {
     }
 
     AssetList getAllAssets(String filter) throws IOException, InvalidJsonAssetException {
-        // escape '|' character used in or-filtering
-        filter = filter.replace("|", "%7C");
         String assetsJson = doGet("/assets?" + filter, 200);
         return AssetList.jsonArrayToAssetList(assetsJson);
     }
