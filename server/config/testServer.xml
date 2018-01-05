@@ -98,6 +98,18 @@ limitations under the License.
         </application-bnd>
     </webApplication>
     
+    <webApplication id="lars.memoryBackend" location="larsServerFat-memoryBackend.war" name="lars.memoryBackend" contextRoot="/memorybackend">
+         <classloader commonLibraryRef="mongo-lib" apiTypeVisibility="spec,ibm-api,api,third-party"/>
+         <application-bnd>
+             <security-role name="User">
+                 <group name="Users"/>
+             </security-role>
+             <security-role name="Administrator">
+                 <group name="Administrators"/>
+             </security-role>
+         </application-bnd>
+    </webApplication>
+    
     @LIBERTY_TRACE_SPEC@
     
 </server>

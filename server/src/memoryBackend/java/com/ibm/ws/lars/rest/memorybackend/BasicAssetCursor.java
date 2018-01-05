@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *******************************************************************************/
-package com.ibm.ws.lars.rest;
+package com.ibm.ws.lars.rest.memorybackend;
 
 import java.io.IOException;
 import java.util.Collection;

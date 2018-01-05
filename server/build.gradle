@@ -48,7 +48,8 @@ def requiredSpecJars = [
     'com.ibm.*.javaee.jaxrs.2.0_*.jar',
     'com.ibm.*.javaee.servlet.3.1_*.jar',
     'com.ibm.*.javaee.cdi.1.2_*.jar',
-    'com.ibm.*.javaee.annotation.1.2_*.jar']
+    'com.ibm.*.javaee.annotation.1.2_*.jar',
+    'com.ibm.*.javaee.interceptor.1.2_*.jar']
 
 ext {
     serverName = archivesBaseName
@@ -62,13 +63,12 @@ configurations {
     providedCompile.extendsFrom sharedLibs
     antTasks
     fatDeployedCompile.extendsFrom providedCompile
+    memoryBackendCompile.extendsFrom providedCompile
 }
 
 sourceSets {
-    fatDeployed {
-        compileClasspath += sourceSets.main.output
-        runtimeClasspath += sourceSets.main.output
-    }
+    fatDeployed
+    memoryBackend
 }
 
 dependencies {
@@ -87,11 +87,15 @@ dependencies {
     testCompile group:'org.apache.httpcomponents', name:'httpmime', version:httpmime_version
     testCompile group:'org.jmockit', name:'jmockit', version:jmockit_version
     testCompile project(':test-utils')
+    testCompile sourceSets.memoryBackend.output
     
     // The unit tests need some Liberty classes at runtime, but they should
     // not be compiling against these.
     testRuntime fileTree(dir: "${libertyRoot}/lib", include: '*slf4*.jar')
     testRuntime group:'org.apache.cxf', name:'cxf-rt-frontend-jaxrs', version:'3.1.+'
+    
+    fatDeployedCompile sourceSets.main.output
+    memoryBackendCompile sourceSets.main.output
     
     antTasks group:'net.wasdev.wlp.ant', name:'wlp-anttasks', version:wlp_ant_tasks_version
 }
@@ -129,11 +133,22 @@ task bluemixWar(type: War) {
 assemble.dependsOn bluemixWar
 
 task fatWar(type: War) {
-    dependsOn fatDeployedClasses
     baseName='larsServerFat'
-    into ('WEB-INF/classes') {
-        from sourceSets.fatDeployed.output
-    }
+    classpath sourceSets.fatDeployed.output
+}
+
+task memoryBackendWar(type: War) {
+    description 'Assemble the war which uses an in-memory backend'
+    baseName='larsServer-memoryBackend'
+    classpath sourceSets.memoryBackend.output
+}
+assemble.dependsOn memoryBackendWar
+
+task memoryBackendFatWar(type: War) {
+    baseName='larsServerFat-memoryBackend'
+    classpath sourceSets.memoryBackend.output
+    classpath sourceSets.fatDeployed.output
+
 }
 
 test {
@@ -209,12 +224,10 @@ task createTestUsrDir (type: Copy) {
 
     // Add the bluemix war as a separate app, so that the https redirection
     // in the web.xml can be tested    
-    from(bluemixWar) {
-        into "servers/${testServerName}/apps"
-    }
-    
-    from(fatWar) {
-        into "servers/${testServerName}/apps"
+    into("servers/${testServerName}/apps") {
+        from (bluemixWar)
+        from (fatWar)
+        from (memoryBackendFatWar)
     }
     
     from('config/baseUrlServer.xml') {

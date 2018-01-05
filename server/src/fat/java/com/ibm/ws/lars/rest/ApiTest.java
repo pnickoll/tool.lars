@@ -90,7 +90,8 @@ public class ApiTest {
     @Parameters(name = "{0}")
     public static Collection<Object[]> data() {
         return Arrays.asList(new Object[][] { { Protocol.HTTP },
-                                              { Protocol.HTTPS } });
+                                             { Protocol.HTTPS },
+                                             { Protocol.HTTP_INMEMORY } });
     }
 
     public ApiTest(Protocol protocol) {

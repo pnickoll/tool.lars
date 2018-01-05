@@ -125,7 +125,7 @@ public class RepositoryContext extends ExternalResource {
     private final static ObjectMapper jsonReader = new ObjectMapper();
 
     enum Protocol {
-        HTTP, HTTPS
+        HTTP, HTTPS, HTTP_INMEMORY
     }
 
     enum Redirects {
@@ -137,6 +137,7 @@ public class RepositoryContext extends ExternalResource {
         DEFAULT_URLS = new HashMap<Protocol, String>();
         DEFAULT_URLS.put(Protocol.HTTP, "http://localhost:" + FatUtils.LIBERTY_PORT_HTTP + FatUtils.LARS_APPLICATION_ROOT);
         DEFAULT_URLS.put(Protocol.HTTPS, "https://localhost:" + FatUtils.LIBERTY_PORT_HTTPS + FatUtils.LARS_APPLICATION_ROOT);
+        DEFAULT_URLS.put(Protocol.HTTP_INMEMORY, "https://localhost:" + FatUtils.LIBERTY_PORT_HTTPS + "/memorybackend" + FatUtils.LARS_APPLICATION_ROOT);
     };
 
     /**

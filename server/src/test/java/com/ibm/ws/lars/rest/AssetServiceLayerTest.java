@@ -40,6 +40,7 @@ import com.ibm.ws.lars.rest.exceptions.InvalidJsonAssetException;
 import com.ibm.ws.lars.rest.exceptions.NonExistentArtefactException;
 import com.ibm.ws.lars.rest.injection.AssetServiceLayerInjection;
 import com.ibm.ws.lars.rest.injection.ConfigurationInjection;
+import com.ibm.ws.lars.rest.memorybackend.MemoryPersistor;
 import com.ibm.ws.lars.rest.model.Asset;
 import com.ibm.ws.lars.rest.model.AssetCursor;
 import com.ibm.ws.lars.rest.model.Attachment;

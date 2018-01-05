@@ -14,20 +14,36 @@
  * limitations under the License.
  *******************************************************************************/
 
-package com.ibm.ws.lars.rest;
+package com.ibm.ws.lars.rest.memorybackend;
+
+import static javax.interceptor.Interceptor.Priority.APPLICATION;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Set;
 
+import javax.annotation.Priority;
+import javax.enterprise.inject.Alternative;
+
+import com.ibm.ws.lars.rest.AssetFilter;
+import com.ibm.ws.lars.rest.Condition;
+import com.ibm.ws.lars.rest.PaginationOptions;
+import com.ibm.ws.lars.rest.Persistor;
+import com.ibm.ws.lars.rest.SortOptions;
+import com.ibm.ws.lars.rest.Condition.Operation;
 import com.ibm.ws.lars.rest.exceptions.AssetPersistenceException;
 import com.ibm.ws.lars.rest.exceptions.InvalidJsonAssetException;
 import com.ibm.ws.lars.rest.exceptions.NonExistentArtefactException;
@@ -39,13 +55,21 @@ import com.ibm.ws.lars.rest.model.AttachmentContentResponse;
 import com.ibm.ws.lars.rest.model.AttachmentList;
 
 /**
- *
+ * Alternative Persistor implementation which just stores the data in memory.
+ * <p>
+ * This makes it entirely unsuitable production use or even testing with large amounts of data, but
+ * it does allow small-scale testing without needing a database.
+ * <p>
+ * This class is annotated as an Alternative with a Priority, which means that if it's included in
+ * the application, it will be used instead of the regular MongoDB Persistor.
  */
+@Alternative
+@Priority(APPLICATION)
 public class MemoryPersistor implements Persistor {
 
     static private long lastId = 0;
 
-    static synchronized String getNextId() {
+    private static synchronized String getNextId() {
         lastId++;
         return String.format("%024x", lastId);
     }
@@ -60,7 +84,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAllAssets()
      */
     @Override
@@ -71,23 +95,68 @@ public class MemoryPersistor implements Persistor {
 
     @Override
     public AssetCursor retrieveAllAssets(Collection<AssetFilter> filters, String searchTerm, PaginationOptions pagination, SortOptions sortOptions) {
-        throw new UnsupportedOperationException("Filtering is not supported in this test facade");
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (Map<String, Object> asset : assets.values()) {
+            if (searchTerm != null && !searchFinds(asset, searchTerm)) {
+                continue;
+            }
+
+            if (filters != null && !filtersMatch(asset, filters)) {
+                continue;
+            }
+
+            results.add(asset);
+        }
+
+        sort(results, sortOptions);
+        results = paginate(results, pagination);
+        return new BasicAssetCursor(results);
     }
 
     @Override
     public List<Object> getDistinctValues(String field, Collection<AssetFilter> filters, String searchTerm) {
-        throw new UnsupportedOperationException("Filtering is not supported in this test facade");
+        Set<Object> results = new HashSet<Object>();
+
+        for (Map<String, Object> asset : assets.values()) {
+            if (searchTerm != null && !searchFinds(asset, searchTerm)) {
+                continue;
+            }
+
+            if (filters != null && !filtersMatch(asset, filters)) {
+                continue;
+            }
+
+            Object value = getValue(asset, field);
+            if (value != null) {
+                results.add(value);
+            }
+        }
+
+        return new ArrayList<Object>(results);
     }
 
     /** {@inheritDoc} */
     @Override
     public int countAllAssets(Collection<AssetFilter> filters, String searchTerm) {
-        throw new UnsupportedOperationException("Filtering is not supported in this test facade");
+        int count = 0;
+        for (Map<String, Object> asset : assets.values()) {
+            if (searchTerm != null && !searchFinds(asset, searchTerm)) {
+                continue;
+            }
+
+            if (filters != null && !filtersMatch(asset, filters)) {
+                continue;
+            }
+
+            count++;
+        }
+
+        return count;
     }
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAsset(java.lang.String)
      */
     @Override
@@ -109,7 +178,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#deleteAsset(java.lang.String)
      */
     @Override
@@ -119,7 +188,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#updateAsset(java.lang.String,
      * com.ibm.ws.lars.rest.model.Asset)
      */
@@ -131,7 +200,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#findAttachmentsForAsset(java.lang.String)
      */
     @Override
@@ -149,7 +218,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#createAttachmentContent(java.lang.String,
      * java.lang.String, java.io.InputStream)
      */
@@ -180,7 +249,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see
      * com.ibm.ws.lars.rest.Persistor#createAttachmentMetadata(com.ibm.ws.lars.rest.model.Attachment
      * )
@@ -200,7 +269,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAttachmentMetadata(java.lang.String)
      */
     @Override
@@ -213,27 +282,27 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#deleteAttachmentContent(java.lang.String)
      */
     @Override
     public void deleteAttachmentContent(String attachmentId) {
-        throw new RuntimeException("not implemented");
+        gridFS.remove(attachmentId);
     }
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#deleteAttachmentMetadata(java.lang.String)
      */
     @Override
     public void deleteAttachmentMetadata(String attachmentId) {
-        throw new RuntimeException("not implemented");
+        attachments.remove(attachmentId);
     }
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAttachmentContent(java.lang.String,
      * java.lang.String, java.lang.String)
      */
@@ -247,7 +316,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     *
+     * 
      * @see com.ibm.ws.lars.rest.Persistor#allocateNewId()
      */
     @Override
@@ -261,20 +330,157 @@ public class MemoryPersistor implements Persistor {
         // Nothing to be done
     }
 
-}
-
-class AttachmentContent {
-    String name;
-    String contentType;
-    String id;
-    byte[] content;
-
-    public AttachmentContent(String name, String contentType, String id, byte[] content) {
-        this.name = name;
-        this.contentType = contentType;
-        this.id = id;
-        // Note we do not defensively copy the content so you must not alter
-        // the contents of the array
-        this.content = content;
+    private static boolean filtersMatch(Map<?, ?> object, Collection<AssetFilter> filters) {
+        for (AssetFilter filter : filters) {
+            if (matches(object, filter)) {
+                return true;
+            }
+        }
+        return false;
     }
+
+    private static boolean matches(Map<?, ?> object, AssetFilter filter) {
+        Object value = getValue(object, filter.getKey());
+        for (Condition condition : filter.getConditions()) {
+            if (matches(value, condition)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean matches(Object value, Condition condition) {
+        if (value instanceof List<?>) {
+            for (Object valueElement : (List<?>) value) {
+                if (matches(valueElement, condition)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        boolean matches = condition.equals(value);
+        if (matches && condition.getOperation() == Operation.EQUALS) {
+            return true;
+        } else if (!matches && condition.getOperation() == Operation.NOT_EQUALS) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private static boolean searchFinds(Map<?, ?> object, String searchString) {
+        List<String> fieldsToCheck = Arrays.asList("name", "description");
+
+        for (String field : fieldsToCheck) {
+            Object value = getValue(object, field);
+            if (value instanceof String) {
+                String stringValue = (String) value;
+                if (stringValue.contains(searchString)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static Object getValue(Map<?, ?> object, String key) {
+        List<String> path = Arrays.asList(key.split("\\."));
+        return getValue(object, path);
+    }
+
+    private static Object getValue(Map<?, ?> object, List<String> path) {
+        Object nextObject = object.get(path.get(0));
+        if (path.size() == 1) {
+            return nextObject;
+        } else if (nextObject instanceof Map) {
+            return getValue((Map<?, ?>) nextObject, path.subList(1, path.size()));
+        } else {
+            return null;
+        }
+    }
+
+    private static void sort(List<Map<String, Object>> assets, SortOptions sort) {
+        if (sort == null) {
+            return;
+        }
+        Collections.sort(assets, new SortOptionComparator(sort));
+    }
+
+    private static <T> List<T> paginate(List<T> list, PaginationOptions options) {
+        if (options == null) {
+            return list;
+        }
+
+        if (options.getOffset() >= list.size()) {
+            return Collections.emptyList();
+        }
+
+        int limit = options.getLimit();
+        int offset = options.getOffset();
+
+        if (offset > list.size()) {
+            return Collections.emptyList();
+        }
+
+        if (offset + limit > list.size()) {
+            limit = list.size() - offset;
+        }
+
+        return list.subList(offset, offset + limit);
+    }
+
+    private static class SortOptionComparator implements Comparator<Map<String, Object>> {
+        private final SortOptions sort;
+
+        public SortOptionComparator(SortOptions sort) {
+            this.sort = sort;
+        }
+
+        @Override
+        public int compare(Map<String, Object> o1, Map<String, Object> o2) {
+            Object v1 = getValue(o1, sort.getField());
+            Object v2 = getValue(o2, sort.getField());
+            String s1 = null;
+            String s2 = null;
+            if (v1 instanceof String) {
+                s1 = (String) v1;
+            }
+
+            if (v2 instanceof String) {
+                s2 = (String) v2;
+            }
+
+            if (s1 == null) {
+                if (s2 == null) {
+                    return 0;
+                } else {
+                    return 1;
+                }
+            } else if (s2 == null) {
+                return -1;
+            } else {
+                return s1.compareTo(s2);
+            }
+        }
+    }
+
+    @SuppressWarnings("unused")
+    private static class AttachmentContent {
+        private final String name;
+        private final String contentType;
+        private final String id;
+        private final byte[] content;
+
+        public AttachmentContent(String name, String contentType, String id, byte[] content) {
+            this.name = name;
+            this.contentType = contentType;
+            this.id = id;
+            // Note we do not defensively copy the content so you must not alter
+            // the contents of the array
+            this.content = content;
+        }
+    }
+
 }
