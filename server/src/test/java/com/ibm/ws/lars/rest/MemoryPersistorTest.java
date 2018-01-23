@@ -110,6 +110,29 @@ public class MemoryPersistorTest {
 
     }
 
+    @Test
+    public void testFilterMatchesList() {
+        Map<?, ?> testMap =
+                map(
+                    "foo", "bar",
+                    "items", list(
+                                  map(
+                                      "name", "foo",
+                                      "description", "foo"
+                                  ),
+                                  map(
+                                      "name", "bar",
+                                      "description", "bar"
+                                  )
+                    ),
+                    "baz", "foobar"
+                );
+
+        assertThat(matches(testMap, filter("items.name", equals("foo"))), is(true));
+        assertThat(matches(testMap, filter("items.name", equals("bar"))), is(true));
+        assertThat(matches(testMap, filter("items.name", equals("baz"))), is(false));
+    }
+
     private boolean matches(Map<?, ?> object, AssetFilter filter) {
         try {
             Method m = MemoryPersistor.class.getDeclaredMethod("matches", Map.class, AssetFilter.class);

@@ -88,7 +88,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAllAssets()
      */
     @Override
@@ -160,7 +160,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAsset(java.lang.String)
      */
     @Override
@@ -182,7 +182,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#deleteAsset(java.lang.String)
      */
     @Override
@@ -192,7 +192,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#updateAsset(java.lang.String,
      * com.ibm.ws.lars.rest.model.Asset)
      */
@@ -204,7 +204,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#findAttachmentsForAsset(java.lang.String)
      */
     @Override
@@ -222,7 +222,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#createAttachmentContent(java.lang.String,
      * java.lang.String, java.io.InputStream)
      */
@@ -253,7 +253,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see
      * com.ibm.ws.lars.rest.Persistor#createAttachmentMetadata(com.ibm.ws.lars.rest.model.Attachment
      * )
@@ -273,7 +273,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAttachmentMetadata(java.lang.String)
      */
     @Override
@@ -286,7 +286,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#deleteAttachmentContent(java.lang.String)
      */
     @Override
@@ -296,7 +296,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#deleteAttachmentMetadata(java.lang.String)
      */
     @Override
@@ -306,7 +306,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAttachmentContent(java.lang.String,
      * java.lang.String, java.lang.String)
      */
@@ -320,7 +320,7 @@ public class MemoryPersistor implements Persistor {
 
     /*
      * (non-Javadoc)
-     * 
+     *
      * @see com.ibm.ws.lars.rest.Persistor#allocateNewId()
      */
     @Override
@@ -437,6 +437,14 @@ public class MemoryPersistor implements Persistor {
             return nextObject;
         } else if (nextObject instanceof Map) {
             return getValue((Map<?, ?>) nextObject, path.subList(1, path.size()));
+        } else if (nextObject instanceof List) {
+            List<Object> results = new ArrayList<Object>();
+            for (Object listObj : (List<?>) nextObject) {
+                if (listObj instanceof Map) {
+                    results.add(getValue((Map<?, ?>) listObj, path.subList(1, path.size())));
+                }
+            }
+            return results;
         } else {
             return null;
         }
