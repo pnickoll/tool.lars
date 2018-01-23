@@ -36,14 +36,17 @@ import java.util.Objects;
 import java.util.Set;
 
 import javax.annotation.Priority;
+import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.inject.Alternative;
 
 import com.ibm.ws.lars.rest.AssetFilter;
 import com.ibm.ws.lars.rest.Condition;
+import com.ibm.ws.lars.rest.Condition.Operation;
 import com.ibm.ws.lars.rest.PaginationOptions;
 import com.ibm.ws.lars.rest.Persistor;
+import com.ibm.ws.lars.rest.RepositoryRESTResource;
 import com.ibm.ws.lars.rest.SortOptions;
-import com.ibm.ws.lars.rest.Condition.Operation;
+import com.ibm.ws.lars.rest.SortOptions.SortOrder;
 import com.ibm.ws.lars.rest.exceptions.AssetPersistenceException;
 import com.ibm.ws.lars.rest.exceptions.InvalidJsonAssetException;
 import com.ibm.ws.lars.rest.exceptions.NonExistentArtefactException;
@@ -63,6 +66,7 @@ import com.ibm.ws.lars.rest.model.AttachmentList;
  * This class is annotated as an Alternative with a Priority, which means that if it's included in
  * the application, it will be used instead of the regular MongoDB Persistor.
  */
+@ApplicationScoped
 @Alternative
 @Priority(APPLICATION)
 public class MemoryPersistor implements Persistor {
@@ -162,7 +166,7 @@ public class MemoryPersistor implements Persistor {
     @Override
     public Asset retrieveAsset(String assetId) throws NonExistentArtefactException {
         if (!assets.containsKey(assetId)) {
-            throw new NonExistentArtefactException();
+            throw new NonExistentArtefactException(assetId.toString(), RepositoryRESTResource.ArtefactType.ASSET);
         }
         return Asset.createAssetFromMap(new HashMap<>(assets.get(assetId)));
     }
@@ -275,7 +279,7 @@ public class MemoryPersistor implements Persistor {
     @Override
     public Attachment retrieveAttachmentMetadata(String attachmentId) throws NonExistentArtefactException {
         if (!attachments.containsKey(attachmentId)) {
-            throw new NonExistentArtefactException();
+            throw new NonExistentArtefactException(attachmentId, RepositoryRESTResource.ArtefactType.ATTACHMENT);
         }
         return Attachment.createAttachmentFromMap(new HashMap<>(attachments.get(attachmentId)));
     }
@@ -332,11 +336,11 @@ public class MemoryPersistor implements Persistor {
 
     private static boolean filtersMatch(Map<?, ?> object, Collection<AssetFilter> filters) {
         for (AssetFilter filter : filters) {
-            if (matches(object, filter)) {
-                return true;
+            if (!matches(object, filter)) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     private static boolean matches(Map<?, ?> object, AssetFilter filter) {
@@ -359,7 +363,7 @@ public class MemoryPersistor implements Persistor {
             return false;
         }
 
-        boolean matches = condition.equals(value);
+        boolean matches = condition.getValue().equals(value);
         if (matches && condition.getOperation() == Operation.EQUALS) {
             return true;
         } else if (!matches && condition.getOperation() == Operation.NOT_EQUALS) {
@@ -370,13 +374,50 @@ public class MemoryPersistor implements Persistor {
     }
 
     private static boolean searchFinds(Map<?, ?> object, String searchString) {
+        /*
+         * The logic here is a bit random but matches MongoDB's logic First split the search string
+         * into tokens: * Negations (e.g. -foo) * Phrases (e.g. "my wibble") * Words (e.g. bar)
+         */
+
+        SearchStringParser parser = new SearchStringParser(searchString);
         List<String> fieldsToCheck = Arrays.asList("name", "description");
 
+        // object must not match any negations
+        for (String negation : parser.negations) {
+            if (fieldsContain(object, fieldsToCheck, negation)) {
+                return false;
+            }
+        }
+
+        // Object must match all phrases
+        for (String phrase : parser.phrases) {
+            if (!fieldsContain(object, fieldsToCheck, phrase)) {
+                return false;
+            }
+        }
+
+        // If there are any phrases and it matches them all, return true
+        if (!parser.phrases.isEmpty()) {
+            return true;
+        }
+
+        // Object must match any word
+        for (String word : parser.words) {
+            if (fieldsContain(object, fieldsToCheck, word)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean fieldsContain(Map<?, ?> object, List<String> fieldsToCheck, String string) {
+        string = string.toLowerCase();
         for (String field : fieldsToCheck) {
             Object value = getValue(object, field);
             if (value instanceof String) {
                 String stringValue = (String) value;
-                if (stringValue.contains(searchString)) {
+                if (stringValue.toLowerCase().contains(string)) {
                     return true;
                 }
             }
@@ -440,6 +481,14 @@ public class MemoryPersistor implements Persistor {
 
         @Override
         public int compare(Map<String, Object> o1, Map<String, Object> o2) {
+            int result = ascendingCompare(o1, o2);
+            if (sort.getSortOrder() == SortOrder.DESCENDING) {
+                result = -result;
+            }
+            return result;
+        }
+
+        private int ascendingCompare(Map<String, Object> o1, Map<String, Object> o2) {
             Object v1 = getValue(o1, sort.getField());
             Object v2 = getValue(o2, sort.getField());
             String s1 = null;
@@ -480,6 +529,66 @@ public class MemoryPersistor implements Persistor {
             // Note we do not defensively copy the content so you must not alter
             // the contents of the array
             this.content = content;
+        }
+    }
+
+    private static class SearchStringParser {
+        private final List<String> phrases = new ArrayList<String>();
+        private final List<String> words = new ArrayList<String>();
+        private final List<String> negations = new ArrayList<String>();
+        StringBuilder token = new StringBuilder();
+        boolean quoted = false;
+        boolean inToken = false;
+
+        private SearchStringParser(String searchString) {
+            for (int i = 0; i < searchString.length(); i++) {
+                char c = searchString.charAt(i);
+                if (c == '"') {
+                    if (quoted) {
+                        addChar(c);
+                        endToken();
+                    } else {
+                        endToken();
+                        quoted = true;
+                        addChar(c);
+                    }
+                } else if (Character.isAlphabetic(c) || Character.isDigit(c) || c == '-') {
+                    addChar(c);
+                } else {
+                    if (quoted) {
+                        addChar(c);
+                    } else {
+                        endToken();
+                    }
+                }
+            }
+
+            endToken();
+        }
+
+        private void addChar(char c) {
+            token.append(c);
+            inToken = true;
+        }
+
+        private void endToken() {
+            if (!inToken) {
+                return;
+            }
+
+            String finalToken = token.toString();
+            token = new StringBuilder();
+            inToken = false;
+            quoted = false;
+            if (finalToken.startsWith("\"") && finalToken.endsWith("\"")) {
+                finalToken = finalToken.substring(1, finalToken.length() - 1);
+                phrases.add(finalToken);
+            } else if (finalToken.startsWith("-")) {
+                finalToken = finalToken.substring(1, finalToken.length());
+                negations.add(finalToken);
+            } else {
+                words.add(finalToken);
+            }
         }
     }
 

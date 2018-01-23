@@ -20,11 +20,14 @@ import static com.ibm.ws.lars.testutils.matchers.SummaryResultMatcher.summaryRes
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeThat;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -83,6 +86,7 @@ public class ApiTest {
     private static final long RANDOM_SEED = 0xACEDEADBEEFL;
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private Random random;
+    private final Protocol protocol;
 
     @Rule
     public final RepositoryContext repository;
@@ -96,6 +100,7 @@ public class ApiTest {
 
     public ApiTest(Protocol protocol) {
         this.repository = RepositoryContext.createAsAdmin(protocol);
+        this.protocol = protocol;
     }
 
     @Before
@@ -1211,6 +1216,9 @@ public class ApiTest {
      */
     @Test
     public void test500Mapping() throws InvalidJsonAssetException, ParseException, IOException {
+
+        // This test hacks the database so it does not work with the in-memory storage
+        assumeThat(protocol, is(not(Protocol.HTTP_INMEMORY)));
 
         // First, make a direct connection to the database, and insert a dodgy asset
         String ID = "_id";
