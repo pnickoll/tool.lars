@@ -80,6 +80,8 @@ public class MemoryPersistor implements Persistor {
 
     private static final String ASSET_ID = "assetId";
 
+    private static final String MATCH_SCORE = "$matchScore";
+
     private final Map<String, Map<String, Object>> assets = new HashMap<>();
 
     private final Map<String, Map<String, Object>> attachments = new HashMap<>();
@@ -112,8 +114,16 @@ public class MemoryPersistor implements Persistor {
             results.add(asset);
         }
 
+        if (searchTerm != null && sortOptions == null) {
+            sortOptions = new SortOptions(MATCH_SCORE, SortOrder.DESCENDING);
+        }
+
         sort(results, sortOptions);
         results = paginate(results, pagination);
+
+        for (Map<?, ?> result : results) {
+            result.remove(MATCH_SCORE);
+        }
         return new BasicAssetCursor(results);
     }
 
@@ -334,6 +344,13 @@ public class MemoryPersistor implements Persistor {
         // Nothing to be done
     }
 
+    /**
+     * Checks whether an asset object matches all of a set of filters
+     *
+     * @param object the asset object
+     * @param filters the filters to check
+     * @return true if the asset matches all of the filters
+     */
     private static boolean filtersMatch(Map<?, ?> object, Collection<AssetFilter> filters) {
         for (AssetFilter filter : filters) {
             if (!matches(object, filter)) {
@@ -343,6 +360,15 @@ public class MemoryPersistor implements Persistor {
         return true;
     }
 
+    /**
+     * Checks whether an asset matches a filter
+     * <p>
+     * An asset matches a filter if the value for the key matches any of the filter conditions
+     *
+     * @param object the asset object
+     * @param filter the filter
+     * @return true if object matches filter
+     */
     private static boolean matches(Map<?, ?> object, AssetFilter filter) {
         Object value = getValue(object, filter.getKey());
         for (Condition condition : filter.getConditions()) {
@@ -353,6 +379,15 @@ public class MemoryPersistor implements Persistor {
         return false;
     }
 
+    /**
+     * Checks whether an value matches a filter condition
+     * <p>
+     * If the value is a list, it checks whether any value in the list matches the condition
+     *
+     * @param value the value to check
+     * @param condition the condition to check against
+     * @return true if the value matches the condition
+     */
     private static boolean matches(Object value, Condition condition) {
         if (value instanceof List<?>) {
             for (Object valueElement : (List<?>) value) {
@@ -373,14 +408,28 @@ public class MemoryPersistor implements Persistor {
         }
     }
 
-    private static boolean searchFinds(Map<?, ?> object, String searchString) {
+    /**
+     * Checks whether a search should find a given asset and computes the match score
+     * <p>
+     * Checks whether a search for the given string should return the given asset.
+     * <p>
+     * As a side effect, it adds a new property named {@link #MATCH_SCORE} with the match score. The
+     * match score is computed by counting how many of the search terms are matched.
+     *
+     * @param object the asset object
+     * @param searchString the search string
+     * @return true if a search for the search string should return the asset
+     */
+    private static boolean searchFinds(Map<String, Object> object, String searchString) {
         /*
          * The logic here is a bit random but matches MongoDB's logic First split the search string
          * into tokens: * Negations (e.g. -foo) * Phrases (e.g. "my wibble") * Words (e.g. bar)
          */
 
+        int score = 0; // match score
+
         SearchStringParser parser = new SearchStringParser(searchString);
-        List<String> fieldsToCheck = Arrays.asList("name", "description");
+        List<String> fieldsToCheck = Arrays.asList("name", "description", "shortDescription", "tags");
 
         // object must not match any negations
         for (String negation : parser.negations) {
@@ -393,24 +442,40 @@ public class MemoryPersistor implements Persistor {
         for (String phrase : parser.phrases) {
             if (!fieldsContain(object, fieldsToCheck, phrase)) {
                 return false;
+            } else {
+                score++;
             }
         }
 
+        boolean result = false;
+
         // If there are any phrases and it matches them all, return true
+        // We need to keep checking though to calculate the score
         if (!parser.phrases.isEmpty()) {
-            return true;
+            result = true;
         }
 
         // Object must match any word
         for (String word : parser.words) {
             if (fieldsContain(object, fieldsToCheck, word)) {
-                return true;
+                result = true;
+                score++;
             }
         }
 
-        return false;
+        object.put(MATCH_SCORE, String.format("%05d", score)); //zero-padded match score for sorting
+
+        return result;
     }
 
+    /**
+     * Checks whether certain fields in an asset contain the given substring
+     *
+     * @param object the asset object
+     * @param fieldsToCheck a list of fields to look at
+     * @param string the substring to look for
+     * @return true if any of the fieldsToCheck in the object contain string as a substring
+     */
     private static boolean fieldsContain(Map<?, ?> object, List<String> fieldsToCheck, String string) {
         string = string.toLowerCase();
         for (String field : fieldsToCheck) {
@@ -426,11 +491,64 @@ public class MemoryPersistor implements Persistor {
         return false;
     }
 
+    /**
+     * Extract a value from an asset object by looking it up by path.
+     * <p>
+     * This broadly matches the mongodb query syntax
+     * <p>
+     * E.g. with an object
+     *
+     * <pre>
+     * { "foo" : "bar" }
+     *
+     * </pre>
+     *
+     * using the key {@code foo} returns {@code bar}
+     * <p>
+     * E.g. with an object
+     *
+     * <pre>
+     * { "foo" :
+     *     {
+     *       "bar" : "baz"
+     *     }
+     * }
+     * </pre>
+     *
+     * using the key {@code foo.bar} returns {@code baz}
+     * <p>
+     * If one of the elements in the path is a list, the result will be a list of objects
+     * <p>
+     * E.g. with an object
+     *
+     * <pre>
+     * { "foo" :
+     *   [
+     *     { "bar": "baz" },
+     *     { "bar": "wibble" }
+     *   ]
+     * }
+     * </pre>
+     *
+     * using the key {@code "foo.bar"} returns {@code [baz, wibble]}
+     *
+     * @param object the asset object
+     * @param key a dot-separated path of fields
+     * @return the value at the given path extracted from the asset
+     */
     private static Object getValue(Map<?, ?> object, String key) {
         List<String> path = Arrays.asList(key.split("\\."));
         return getValue(object, path);
     }
 
+    /**
+     * As {@link #getValue(Map, String)} except accepting a list of path segments rather than a
+     * dot-separated string of path segments.
+     *
+     * @param object the asset object
+     * @param path the path
+     * @return the value at the given path within the object
+     */
     private static Object getValue(Map<?, ?> object, List<String> path) {
         Object nextObject = object.get(path.get(0));
         if (path.size() == 1) {
@@ -450,6 +568,12 @@ public class MemoryPersistor implements Persistor {
         }
     }
 
+    /**
+     * Sorts a list of asset objects accoring to the given SortOptions
+     *
+     * @param assets the assets
+     * @param sort the sort options
+     */
     private static void sort(List<Map<String, Object>> assets, SortOptions sort) {
         if (sort == null) {
             return;
@@ -457,6 +581,13 @@ public class MemoryPersistor implements Persistor {
         Collections.sort(assets, new SortOptionComparator(sort));
     }
 
+    /**
+     * Paginates a list of objects according to the given PaginationOptions
+     *
+     * @param list the objects
+     * @param options the pagination options
+     * @return a sublist of objects, extracted using the pagination options
+     */
     private static <T> List<T> paginate(List<T> list, PaginationOptions options) {
         if (options == null) {
             return list;
@@ -480,6 +611,9 @@ public class MemoryPersistor implements Persistor {
         return list.subList(offset, offset + limit);
     }
 
+    /**
+     * A comparator for comparing assset objects based on SortOptions
+     */
     private static class SortOptionComparator implements Comparator<Map<String, Object>> {
         private final SortOptions sort;
 
@@ -540,6 +674,20 @@ public class MemoryPersistor implements Persistor {
         }
     }
 
+    /**
+     * A parser for search strings
+     *
+     * The search string is tokenized and split into three buckets:
+     * <ul>
+     * <li>quoted phrases</li>
+     * <li>unquoted words</li>
+     * <li>negated words (words beginning with a - sign)</li>
+     * <ul>
+     *
+     * <p>
+     * E.g. the string {@code foo bar -baz "hello world"} would be split into the phrase
+     * {@code hello world}, the words {@code foo} and {@code bar} and the negated word {@code baz}.
+     */
     private static class SearchStringParser {
         private final List<String> phrases = new ArrayList<String>();
         private final List<String> words = new ArrayList<String>();
