@@ -1265,10 +1265,10 @@ public class ResourceTest {
         for (RepositoryResource result : resources) {
             EsaResourceWritable esa = (EsaResourceWritable) result;
             if (esa.getAppliesTo().contains(highestVersion)) {
-                assertEquals(highestVersion + " should be visible", DisplayPolicy.VISIBLE, esa.getWebDisplayPolicy());
+                assertEquals(esa + " - " + highestVersion + " should be visible", DisplayPolicy.VISIBLE, esa.getWebDisplayPolicy());
                 countVisible++;
             } else {
-                assertEquals("other than " + highestVersion + " should be hidden", DisplayPolicy.HIDDEN, esa.getWebDisplayPolicy());
+                assertEquals(esa + "other than " + highestVersion + " should be hidden", DisplayPolicy.HIDDEN, esa.getWebDisplayPolicy());
                 countHidden++;
             }
         }
