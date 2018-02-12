@@ -94,24 +94,26 @@ public class MemoryPersistor implements Persistor {
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAllAssets()
      */
     @Override
-    public AssetCursor retrieveAllAssets() {
+    public synchronized AssetCursor retrieveAllAssets() {
         // Note: retrieveAllAssets does *not* set attachments
-        return new BasicAssetCursor(assets.values());
+        return new BasicAssetCursor(new ArrayList<>(assets.values()));
     }
 
     @Override
     public AssetCursor retrieveAllAssets(Collection<AssetFilter> filters, String searchTerm, PaginationOptions pagination, SortOptions sortOptions) {
         List<Map<String, Object>> results = new ArrayList<>();
-        for (Map<String, Object> asset : assets.values()) {
-            if (searchTerm != null && !searchFinds(asset, searchTerm)) {
-                continue;
-            }
+        synchronized (this) {
+            for (Map<String, Object> asset : assets.values()) {
+                if (searchTerm != null && !searchFinds(asset, searchTerm)) {
+                    continue;
+                }
 
-            if (filters != null && !filtersMatch(asset, filters)) {
-                continue;
-            }
+                if (filters != null && !filtersMatch(asset, filters)) {
+                    continue;
+                }
 
-            results.add(asset);
+                results.add(asset);
+            }
         }
 
         if (searchTerm != null && sortOptions == null) {
@@ -128,7 +130,7 @@ public class MemoryPersistor implements Persistor {
     }
 
     @Override
-    public List<Object> getDistinctValues(String field, Collection<AssetFilter> filters, String searchTerm) {
+    public synchronized List<Object> getDistinctValues(String field, Collection<AssetFilter> filters, String searchTerm) {
         Set<Object> results = new HashSet<Object>();
 
         for (Map<String, Object> asset : assets.values()) {
@@ -151,7 +153,7 @@ public class MemoryPersistor implements Persistor {
 
     /** {@inheritDoc} */
     @Override
-    public int countAllAssets(Collection<AssetFilter> filters, String searchTerm) {
+    public synchronized int countAllAssets(Collection<AssetFilter> filters, String searchTerm) {
         int count = 0;
         for (Map<String, Object> asset : assets.values()) {
             if (searchTerm != null && !searchFinds(asset, searchTerm)) {
@@ -174,7 +176,7 @@ public class MemoryPersistor implements Persistor {
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAsset(java.lang.String)
      */
     @Override
-    public Asset retrieveAsset(String assetId) throws NonExistentArtefactException {
+    public synchronized Asset retrieveAsset(String assetId) throws NonExistentArtefactException {
         if (!assets.containsKey(assetId)) {
             throw new NonExistentArtefactException(assetId.toString(), RepositoryRESTResource.ArtefactType.ASSET);
         }
@@ -182,7 +184,7 @@ public class MemoryPersistor implements Persistor {
     }
 
     @Override
-    public Asset createAsset(Asset newAsset) throws InvalidJsonAssetException {
+    public synchronized Asset createAsset(Asset newAsset) throws InvalidJsonAssetException {
         Map<String, Object> props = newAsset.getProperties();
         String id = getNextId();
         props.put("_id", id);
@@ -196,7 +198,7 @@ public class MemoryPersistor implements Persistor {
      * @see com.ibm.ws.lars.rest.Persistor#deleteAsset(java.lang.String)
      */
     @Override
-    public void deleteAsset(String assetId) {
+    public synchronized void deleteAsset(String assetId) {
         assets.remove(assetId);
     }
 
@@ -207,7 +209,7 @@ public class MemoryPersistor implements Persistor {
      * com.ibm.ws.lars.rest.model.Asset)
      */
     @Override
-    public Asset updateAsset(String assetId, Asset asset) throws InvalidJsonAssetException, NonExistentArtefactException {
+    public synchronized Asset updateAsset(String assetId, Asset asset) throws InvalidJsonAssetException, NonExistentArtefactException {
         assets.put(assetId, asset.getProperties());
         return asset;
     }
@@ -218,7 +220,7 @@ public class MemoryPersistor implements Persistor {
      * @see com.ibm.ws.lars.rest.Persistor#findAttachmentsForAsset(java.lang.String)
      */
     @Override
-    public AttachmentList findAttachmentsForAsset(String assetId) {
+    public synchronized AttachmentList findAttachmentsForAsset(String assetId) {
         List<Map<String, Object>> resultList = new ArrayList<>();
         for (Entry<String, Map<String, Object>> e : attachments.entrySet()) {
             Map<String, Object> attachmentState = e.getValue();
@@ -253,7 +255,9 @@ public class MemoryPersistor implements Persistor {
 
             AttachmentContent attachmentContent = new AttachmentContent(name, contentType, id, contentBytes);
 
-            gridFS.put(id, attachmentContent);
+            synchronized (this) {
+                gridFS.put(id, attachmentContent);
+            }
 
             return new AttachmentContentMetadata(id, contentBytes.length);
         } catch (IOException e) {
@@ -269,7 +273,7 @@ public class MemoryPersistor implements Persistor {
      * )
      */
     @Override
-    public Attachment createAttachmentMetadata(Attachment attachment) {
+    public synchronized Attachment createAttachmentMetadata(Attachment attachment) {
         Map<String, Object> props = new HashMap<>(attachment.getProperties());
         String id = attachment.get_id();
 
@@ -287,7 +291,7 @@ public class MemoryPersistor implements Persistor {
      * @see com.ibm.ws.lars.rest.Persistor#retrieveAttachmentMetadata(java.lang.String)
      */
     @Override
-    public Attachment retrieveAttachmentMetadata(String attachmentId) throws NonExistentArtefactException {
+    public synchronized Attachment retrieveAttachmentMetadata(String attachmentId) throws NonExistentArtefactException {
         if (!attachments.containsKey(attachmentId)) {
             throw new NonExistentArtefactException(attachmentId, RepositoryRESTResource.ArtefactType.ATTACHMENT);
         }
@@ -300,7 +304,7 @@ public class MemoryPersistor implements Persistor {
      * @see com.ibm.ws.lars.rest.Persistor#deleteAttachmentContent(java.lang.String)
      */
     @Override
-    public void deleteAttachmentContent(String attachmentId) {
+    public synchronized void deleteAttachmentContent(String attachmentId) {
         gridFS.remove(attachmentId);
     }
 
@@ -310,7 +314,7 @@ public class MemoryPersistor implements Persistor {
      * @see com.ibm.ws.lars.rest.Persistor#deleteAttachmentMetadata(java.lang.String)
      */
     @Override
-    public void deleteAttachmentMetadata(String attachmentId) {
+    public synchronized void deleteAttachmentMetadata(String attachmentId) {
         attachments.remove(attachmentId);
     }
 
@@ -321,7 +325,7 @@ public class MemoryPersistor implements Persistor {
      * java.lang.String, java.lang.String)
      */
     @Override
-    public AttachmentContentResponse retrieveAttachmentContent(String gridFSId) {
+    public synchronized AttachmentContentResponse retrieveAttachmentContent(String gridFSId) {
         AttachmentContent content = gridFS.get(gridFSId);
         InputStream contentStream = new ByteArrayInputStream(content.content);
         String contentType = content.contentType;
