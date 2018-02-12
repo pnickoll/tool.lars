@@ -89,6 +89,8 @@ public class RepositoryUtilsTest {
             fail("Should not have been able to reach here, repository status should have thrown an exception");
         } catch (IOException io) {
             // expected
+        } catch (RequestFailureException e) {
+            // also possible
         }
     }
 
