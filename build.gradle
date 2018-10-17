@@ -23,6 +23,11 @@ if (hasProperty('versionFile')) {
     apply from: 'LARS_versions.gradle'
 }
 
+println System.getProperty("java.version");
+println System.getProperty("com.ibm.jsse2.overrideDefaultTLS");
+Properties props = System.getProperties();
+props.list(System.out);
+
 boolean haveAnyTestsFailed = false;
 
 loadProperties("${rootProject.rootDir}/test-utils/src/main/resources/config.properties");
